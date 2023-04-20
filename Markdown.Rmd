@@ -1,0 +1,838 @@
+---
+title: "Simple Linear Regression and Simple Logistic Regression"
+author: "Isaac Baca"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+# Introduction:
+
+This project covers simple linear regression and simple logistic regression. In addition to building the models, this project demonstrates how to use the models to make predictions, and how to assess model fit.
+
+This project uses three different data sets:
+
+The **ad_conversion** data set which contains information on social media advertising is used to assess the fit of a simple linear regression model.
+
+The **taiwan_real_estate** data set which contains information on the real estate market in Taiwan is used to visualize relationships and make predictions.
+
+The **churn** data set which contains information from a financial services company is used in a logistic regression model to predict whether a customer will close all accounts (churn) during a time period. 
+
+---
+
+# Table of contents
+1. [Simple Linear Regression](#one)
+2. [Predictions and model objects](#two)
+3. [Assessing model fit](#three)
+3. [Simple logistic regression](#four)
+
+
+---
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+library("fst")
+library("ggplot2")
+library("dplyr")
+library("broom")
+library("ggfortify")
+library("yardstick")
+```
+
+---
+
+
+```{r echo=FALSE}
+ad_conversion = read_fst("/Volumes/Vandy Main/Data Camp/R/Intro to Regression in R/ad_conversion.fst")
+churn = read_fst("/Volumes/Vandy Main/Data Camp/R/Intro to Regression in R/churn.fst")
+taiwan_real_estate = read_fst("/Volumes/Vandy Main/Data Camp/R/Intro to Regression in R/taiwan_real_estate.fst")
+```
+
+---
+
+##### View the structure of the `ad_conversion` dataset
+
+```{r}
+str(ad_conversion)
+```
+
+---
+
+##### View the structure of the `churn` dataset
+
+```{r}
+str(churn)
+```
+
+---
+
+##### View the structure of the `taiwan_real_estate` dataset
+
+```{r}
+str(taiwan_real_estate)
+```
+
+---
+
+<a name="one"><a/>
+
+## Simple Linear Regression
+
+---
+
+##### Before running any statistical tests, I will visualize the relationship between house price per area and the number of nearby convenience stores, using the Taiwan real estate dataset.
+
+I draw a scatter plot of `n_convenience` vs. `price_twd_msq`
+
+I make the points transparent to better visualize overlapping points
+
+I add a linear trend line (with a confidence band)
+
+```{r message=FALSE}
+ggplot(taiwan_real_estate, aes(x = n_convenience, y = price_twd_msq)) +
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = "lm", se = TRUE)
+```
+
+---
+
+##### `geom_smooth()` can display a linear regression trend line, but it doesn't allow access to the intercept and slope as variables, or allow you to work with the model results as variables.
+
+I run a linear regression using `price_twd_msq` as the outcome variable, and `n_convenience` as the predictor variable. 
+
+```{r message=FALSE}
+mdl_price_vs_conv = lm(price_twd_msq ~ n_convenience, data = taiwan_real_estate)
+mdl_price_vs_conv
+```
+##### Interpretation:
+
+The intercept is 8.2242.  On average, a house with zero convenience stores nearby had a price of 8.2242 TWD per square meter.
+
+The slope is 0.7981.  For every additional near by convenience store, the price of a house increases by about 0.7981 TWD per square meter.
+
+--- 
+
+##### for categorical variables, it's better to draw a histogram for each category.
+
+The categorical variable `house_age_years` contains the age of the house.  There are three categories: 0 to 15 years, 15 to 30 years, and 30 to 45 years.
+
+I plot a histogram of `price_twd_msq` with 10 bins, and facet the plot by `house_age_years`.
+
+```{r}
+ggplot(taiwan_real_estate, aes(price_twd_msq)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~house_age_years)
+```
+
+---
+
+##### I view the grouped means for the house prices.
+
+```{r}
+summary_stats <- taiwan_real_estate %>% 
+  group_by(house_age_years) %>% 
+  summarize(mean_by_group = mean(price_twd_msq))
+
+summary_stats
+```
+
+---
+
+##### I run a linear regression using `price_twd_msq` as the outcome variable, and `house_age_years` as the categorical predictor variable.
+
+I remove the intercept from the model using `+ 0`.
+
+```{r}
+mdl_price_vs_age_no_intercept <- lm(price_twd_msq ~ house_age_years + 0, data = taiwan_real_estate)
+mdl_price_vs_age_no_intercept
+```
+##### Interpretation: 
+
+The predicted values for each house age are the same as the grouped means for the house prices.
+
+
+---
+
+<a name="two"><a/>
+
+## Predictions and model objects
+
+---
+
+##### Predictions for the house prices in the Taiwan real estate dataset.
+
+I create a data frame with an `n_convenience` column from zero to ten.
+
+I use the model `mdl_price_vs_conv` to make predictions with `explanatory_data`.
+
+```{r}
+explanatory_data <- data.frame(n_convenience = 0:10)
+
+predict(mdl_price_vs_conv, explanatory_data)
+
+```
+
+---
+
+##### Storing the predictions in a data frame
+
+I mutate `explanatory_data` to include a new column, `price_twd_msq` that contains the predictions.
+
+```{r}
+prediction_data = explanatory_data %>%
+mutate(price_twd_msq = predict(mdl_price_vs_conv, explanatory_data))
+
+prediction_data
+```
+
+---
+
+##### Visualizing predictions
+
+I use the same scatter plot from earlier, but I add in the `prediction_data` in yellow. 
+
+```{r message=FALSE}
+ggplot(taiwan_real_estate, aes(n_convenience, price_twd_msq)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_point(data = prediction_data, color = "yellow")
+```
+
+---
+
+##### Extracting the model elements
+
+I print the coefficients for the model `mdl_price_vs_conv`.
+
+```{r}
+print(coefficients(mdl_price_vs_conv))
+```
+
+---
+
+I print the fitted values for the model `mdl_price_vs_conv`.
+
+These are the predictions on the original data set.
+
+```{r}
+head(fitted(mdl_price_vs_conv))
+```
+
+---
+
+I print the residuals for the model `mdl_price_vs_conv`.
+
+Each residual is the actual response value, minus the predicted response value.
+
+```{r}
+head(residuals(mdl_price_vs_conv))
+```
+
+---
+
+##### I print a summary for the model `mdl_price_vs_conv`.
+
+Call: contains the code to create the model
+
+Residuals: contains summary statistics for the residuals.  If the model is a good fit, the residuals should follow a normal distribution
+
+- Median should be around zero
+
+- The first and third quartile should have about the same absolute value
+
+Coefficients: Contains the statistical significance of the estimates
+
+```{r}
+summary(mdl_price_vs_conv)
+```
+
+---
+
+The broom package contains functions that decompose models into three data frames: one for the coefficient-level elements (the coefficients themselves, as well as p-values for each coefficient), the observation-level elements (like fitted values and residuals), and the model-level elements (mostly performance metrics).
+
+##### I get the coefficient-level elements of the model
+
+```{r}
+tidy(mdl_price_vs_conv)
+```
+
+---
+
+##### I get the observation-level elements of the model
+
+```{r}
+augment(mdl_price_vs_conv)
+```
+
+---
+
+##### I get the model-level elements of the model
+
+```{r}
+glance(mdl_price_vs_conv)
+```
+
+---
+
+##### Transforming the explanatory variable
+
+If there is no straight line relationship between the response variable and the explanatory variable, it is sometimes possible to create one by transforming one or both of the variables.
+
+I use `dist_to_mrt_m` (distance to the nearest metro) to predict `price_twd_msq` (home price).
+
+```{r message=FALSE}
+ggplot(taiwan_real_estate, aes(dist_to_mrt_m, price_twd_msq)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+---
+
+##### I take the square root of `dist_to_mrt_m` (distance to the nearest metro). The numbers on the x-axis track the line more closely.
+
+
+```{r message=FALSE}
+ggplot(taiwan_real_estate, aes(sqrt(dist_to_mrt_m), price_twd_msq)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+---
+
+##### I create a model and use the prediction data to plot new points on the scatter plot.
+
+I run a linear regression of `price_twd_msq` versus the square root of `dist_to_mrt_m` using `taiwan_real_estate`.
+
+I create a new data frame `explanatory_data` with a column `dist_to_mrt_m` with contains values from 0 to 80 by 10, squared.
+
+
+```{r message=FALSE}
+mdl_price_vs_dist <- lm(price_twd_msq ~ sqrt(dist_to_mrt_m), data = taiwan_real_estate)
+
+explanatory_data <- data.frame(dist_to_mrt_m = seq(0, 80, 10) ^ 2)
+explanatory_data
+```
+
+---
+
+I create a new data frame, `prediction_data` by adding a column to `explanatory_data` containing the predictions for the values in `explanatory_data` using the model, `mdl_price_vs_dist`.
+
+
+```{r}
+prediction_data <- explanatory_data %>% 
+  mutate(price_twd_msq = predict(mdl_price_vs_dist, explanatory_data))
+prediction_data
+```
+
+---
+
+I add the predicted values to the plot using `geom_point(data = prediction_data, color = "green", size = 5)`
+
+```{r message=FALSE}
+ggplot(taiwan_real_estate, aes(sqrt(dist_to_mrt_m), price_twd_msq)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_point(data = prediction_data, color = "green", size = 5)
+```
+
+---
+
+<a name="three"><a/>
+
+## Assessing model fit
+
+---
+
+##### The coefficient of determination is a measure of how well the linear regression line fits the observed values. For simple linear regression, it is equal to the square of the correlation between the explanatory and response variables.
+
+Here, I'll create two models for to look at click response to impressions. 
+
+1. `mdl_click_vs_impression_orig` models `n_clicks` versus `n_impressions`. 
+
+2. `mdl_click_vs_impression_trans` is the transformed model. It models `n_clicks` ^ 0.25 versus `n_impressions` ^ 0.25.
+
+
+```{r}
+mdl_click_vs_impression_orig <- lm(n_clicks ~ n_impressions, data = ad_conversion)
+print(summary(mdl_click_vs_impression_orig))
+mdl_click_vs_impression_trans <- lm(I(n_clicks ^ 0.25) ~ I(n_impressions ^ 0.25),data = ad_conversion)
+print(summary(mdl_click_vs_impression_trans))
+```
+
+---
+
+##### Obtaining the coefficient of determination
+
+I get the coefficient of determination for `mdl_click_vs_impression_orig` by glancing at the model, then pulling the `r.squared` value.
+
+```{r}
+mdl_click_vs_impression_orig %>% 
+  glance() %>% 
+  pull(r.squared)
+```
+
+Interpretation: The number of impressions explains 89% of the variability in the number of clicks.
+
+---
+
+I do the same for `mdl_click_vs_impression_trans`.
+
+```{r}
+glance(mdl_click_vs_impression_trans) %>%
+pull(r.squared)
+```
+
+Interpretation: The number of impressions explains 94.5% of the variability in the number of clicks.
+
+The transformed model is a better fit.
+
+---
+
+##### Residual standard error (RSE) is a measure of the typical size of the residuals. Equivalently, it's a measure of how badly wrong you can expect predictions to be. Smaller numbers are better, with zero being a perfect fit to the data.
+
+I get the residual standard error for `mdl_click_vs_impression_orig` by glancing at the model, then pulling the sigma value.
+
+```{r}
+mdl_click_vs_impression_orig %>% 
+  glance() %>% 
+  pull(sigma)
+```
+
+Interpretation: The typical difference between observed number of clicks and predicted number of clicks is 20.
+
+---
+
+I do the same for `mdl_click_vs_impression_trans`.
+
+```{r}
+glance(mdl_click_vs_impression_trans) %>%
+pull(sigma) 
+```
+
+Interpretation: The typical difference between observed number of clicks and predicted number of clicks is .2.
+
+The RSE suggests that `mdl_click_vs_impression_trans` gives more accurate predictions.
+
+---
+
+##### Using plots to assess model fit
+
+`autoplot()` lets you specify which diagnostic plots you are interested in.
+
+- 1 = residuals vs. fitted values
+- 2 = Q-Q plot
+- 3 = scale-location
+
+I compare the residuals vs. fitted values plots for `mdl_click_vs_impression_orig` and `mdl_click_vs_impression_trans`.
+
+```{r}
+autoplot(mdl_click_vs_impression_orig, which = 1)
+autoplot(mdl_click_vs_impression_trans, which = 1)
+```
+
+Interpretation: The residuals track the "y equals 0" line more closely in the transformed model compared to the original model, indicating that the transformed model is a better fit for the data.
+
+---
+
+I compare the Q-Q plots for `mdl_click_vs_impression_orig` and `mdl_click_vs_impression_trans`.
+
+```{r}
+autoplot(mdl_click_vs_impression_orig, which = 2)
+autoplot(mdl_click_vs_impression_trans, which = 2)
+```
+
+Interpretation: The residuals track the "normality" line more closely in the transformed model compared to the original model, indicating that the transformed model is a better fit for the data.
+
+---
+
+I compare the scale-location plots for `mdl_click_vs_impression_orig` and `mdl_click_vs_impression_trans`.
+
+```{r}
+autoplot(mdl_click_vs_impression_orig, which = 3)
+autoplot(mdl_click_vs_impression_trans, which = 3)
+```
+
+Interpretation: The size of the standardized residuals is more consistent in the transformed model compared to the original model, indicating that the transformed model is a better fit for the data.
+
+---
+
+##### Leverage
+
+Leverage measures how unusual or extreme the explanatory variables are for each observation.
+
+A high leverage means that the explanatory variable has values that are different to other points in the dataset.
+
+##### Influence
+
+Influence measures how much a model would change if each observation was left out of the model calculations, one at a time.
+
+That is, it measures how different the prediction line would look if you ran a linear regression on all data points except that point, compared to running a linear regression on the whole dataset.
+
+---
+
+##### Extracting leverage
+
+Here I will use the `mdl_price_vs_dist` model (house price vs the square root of distance from the nearest metro station in the Taiwan real estate dataset).
+
+I augment `mdl_price_vs_dist`, then arrange observations by descending leverage (`.hat`), and get the head of the results.
+
+```{r}
+mdl_price_vs_dist %>% 
+  augment() %>% 
+  arrange(desc(.hat)) %>% 
+  head()
+```
+
+---
+
+##### Extracting influence
+
+I augment `mdl_price_vs_dist`, then arrange observations by descending influence (.cooksd), and get the head of the results.
+
+```{r}
+mdl_price_vs_dist %>% 
+  augment() %>% 
+  arrange(desc(.cooksd)) %>% 
+  head()
+```
+
+---
+
+##### I plot the three outlier diagnostic plots (numbered 4 to 6) for `mdl_price_vs_dist` using `autoplot()`
+
+```{r}
+autoplot(mdl_price_vs_dist, which = c(4, 5, 6), nrow = 3, ncol = 1)
+```
+
+---
+
+<a name="four"><a/>
+
+## Simple logistic regression
+
+---
+
+##### The churn dataset
+
+This data set contains information from a financial services company.  If a customer closed all accounts during a time period, they are considered to have churned and the `has_churned` column is marked with a 1.
+
+The two explanatory variables are the time since the customer first bought a service (`time_since_last_purchase`), and the time since they last bought a service (`time_since_last_purchase`). The time values have been standardized.
+
+
+```{r}
+head(churn)
+```
+
+---
+
+##### Using histograms to get to know the financial services churn dataset
+
+When the response variable is logical, all the points lie on the y equals zero and y equals one lines, making it difficult to see what is happening.  It can be unclear how the explanatory variable is distributed on each line. We can solve this using a histogram.
+
+```{r}
+# Using churn, plot time_since_last_purchase
+ggplot(churn, aes(x = time_since_last_purchase)) +
+  # as a histogram with binwidth 0.25
+  geom_histogram(binwidth = .25) +
+  # faceted in a grid with has_churned on each row
+  facet_grid(rows = vars(has_churned))
+```
+
+Interpretation: The distribution of churned customers is further right than the distribution of non-churned customers (churners typically have a longer time since their last purchase).
+
+---
+
+We can do the same with `time_since_first_purchase`.
+
+```{r}
+ggplot(churn, aes(x = time_since_first_purchase)) +
+geom_histogram(binwidth = .25) +
+facet_grid(row = vars(has_churned))
+```
+
+Interpretation: Churners have a shorter length of relationship than non-churners
+
+---
+
+##### Visualizing linear and logistic models
+
+Visualizing a linear model (red) and a logistic model (blue)
+
+```{r message=FALSE}
+ggplot(churn, aes(time_since_first_purchase, has_churned)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  # Add a glm trend line, no std error ribbon, binomial family
+  geom_smooth(method = "glm", se = FALSE, method.args = list(family = binomial))
+```
+
+Interpretation: The two models give similar predictions in some places, but the logistic model (blue) has a slight curve.
+
+---
+
+##### Logistic regression with `glm()`
+
+Linear regression and logistic regression are special cases of a broader type of models called generalized linear models ("GLMs"). A linear regression makes the assumption that the residuals follow a Gaussian (normal) distribution. By contrast, a logistic regression assumes that residuals follow a binomial distribution.
+
+I model how the length of relationship with a customer affects churn by fitting a logistic regression of `has_churned` versus `time_since_first_purchase` using the churn dataset.
+
+I specify `family = binomial` to fit a logistic model.
+
+```{r}
+time_since_first_purchase = churn$time_since_first_purchase
+mdl_churn_vs_relationship = glm(has_churned ~ time_since_first_purchase, family = binomial, data = churn)
+
+mdl_churn_vs_relationship
+```
+
+---
+
+##### There are four main ways of expressing the prediction from a logistic regression model
+
+- Probabilities
+- Most likely outcome
+- Odds ratio
+- Log odds ratio
+
+---
+
+##### Predicting the probabilities
+
+I create a dataframe of explanatory variables.
+
+
+```{r}
+explanatory_data = data.frame(time_since_first_purchase = seq(-1.5, 4, .25))
+
+explanatory_data
+```
+
+---
+
+Next, I use the model, `mdl_churn_vs_relationship`, and the explanatory data, `explanatory_data`, to predict the probability of churning. I assign the predictions to the `has_churned` column of a data frame, `prediction_data`.
+
+```{r}
+prediction_data <- explanatory_data %>% 
+  mutate(has_churned = predict(mdl_churn_vs_relationship, explanatory_data, type = "response"))
+
+prediction_data
+```
+
+---
+
+I create a scatter plot of `has_churned` versus `time_since_first_purchase` with a smooth glm line.
+
+```{r message=FALSE}
+plt_churn_vs_relationship = ggplot(churn, aes(time_since_first_purchase, has_churned)) + 
+  geom_point() +
+  geom_smooth(method = "glm", se = FALSE, method.args = list(family = binomial))
+
+plt_churn_vs_relationship
+```
+
+
+---
+
+I update the `plt_churn_vs_relationship` plot to add points from `prediction_data`.
+
+
+```{r message=FALSE}
+plt_churn_vs_relationship + geom_point(data = prediction_data, color = "yellow", size = 2)
+```
+
+---
+
+##### Predicting the most likely outcome
+
+When explaining results to a non-technical audience, one may wish to side-step talking about probabilities and simply explain the most likely outcome. That is, rather than saying there is a 60% chance of a customer churning, you say that the most likely outcome is that the customer will churn. The tradeoff here is easier interpretation at the cost of nuance.
+
+I use `prediction_data` to add a column of the most likely churn outcome, `most_likely_outcome`.  This is done by rounding the number in the `has_churned` column. 
+
+```{r}
+prediction_data = explanatory_data %>% 
+  mutate(has_churned = predict(mdl_churn_vs_relationship, explanatory_data, type = "response"),
+    most_likely_outcome = round(has_churned))
+
+prediction_data
+```
+
+---
+
+I update `plt_churn_vs_relationship`, adding yellow points with `most_likely_outcome` as the y aesthetic, using `prediction_data`.
+
+```{r message=FALSE}
+plt_churn_vs_relationship +
+  geom_point(aes(y = most_likely_outcome), 
+    data = prediction_data, 
+    color = "yellow",
+    size = 2)
+```
+
+---
+
+##### Odds ratio
+
+Odds ratios compare the probability of something happening with the probability of it not happening. This is sometimes easier to reason about than probabilities, particularly when you want to make decisions about choices. For example, if a customer has a 20% chance of churning, it maybe more intuitive to say "the chance of them not churning is four times higher than the chance of them churning".
+
+I update `prediction_data` to add a column, `odds_ratio`, of the odds ratios.
+
+```{r}
+prediction_data <- explanatory_data %>% 
+  mutate(has_churned = predict(mdl_churn_vs_relationship, explanatory_data, type = "response"),
+    odds_ratio = has_churned / (1 - has_churned))
+
+prediction_data
+```
+
+---
+
+I use `prediction_data` to draw a line plot of `odds_ratio` versus `time_since_first_purchase`. I add a dotted horizontal line at `odds_ratio` equal to 1.
+
+```{r}
+ggplot(prediction_data, aes(x = time_since_first_purchase, y = odds_ratio)) +
+  geom_line() +
+  # Add a dotted horizontal line at y = 1
+  geom_hline(yintercept =  1, linetype = "dotted")
+```
+
+---
+
+##### Log odds ratio
+
+One downside to probabilities and odds ratios for logistic regression predictions is that the prediction lines for each are curved. This makes it harder to reason about what happens to the prediction when you make a change to the explanatory variable. 
+
+The logarithm of the odds ratio (the "log odds ratio") does have a linear relationship between predicted response and explanatory variable. That means that as the explanatory variable changes, you don't see dramatic changes in the response metric - only linear changes.
+
+Since the actual values of log odds ratio are less intuitive than (linear) odds ratio, for visualization purposes it's usually better to plot the odds ratio and apply a log transformation to the y-axis scale.
+
+---
+
+I update `prediction_data` to add the log odds ratio calculated two different ways.
+
+```{r}
+prediction_data <- explanatory_data %>% 
+  mutate(has_churned = predict(mdl_churn_vs_relationship, explanatory_data, type = "response"),
+    odds_ratio = has_churned / (1 - has_churned),
+    # Add the log odds ratio from odds_ratio
+    log_odds_ratio = log(odds_ratio),
+    # Add the log odds ratio using predict()
+    log_odds_ratio2 = predict(mdl_churn_vs_relationship, explanatory_data))
+
+prediction_data
+```
+
+---
+
+I update the previous plot using `scale_y_log10()` to use a logarithmic y-scale.
+
+```{r}
+ggplot(prediction_data, aes(time_since_first_purchase, odds_ratio)) +
+  geom_line() +
+  geom_hline(yintercept = 1, linetype = "dotted") +
+  # Use a logarithmic y-scale
+  scale_y_log10()
+```
+
+---
+
+##### Quantifying logistic regression fit
+
+I will look at three metrics for quantifying fit: 
+
+- Accuracy
+- Sensitivity
+- Specificity
+
+---
+
+First, I will calculate the confusion matrix. A confusion matrix is the basis of all performance metrics for models with a categorical response (such as a logistic regression). It contains the counts of each actual response-predicted response pair. In this case, where there are two possible responses (churn or not churn), there are four overall outcomes.
+
+- The customer churned and the model predicted that.
+- The customer churned but the model didn't predict that.
+- The customer didn't churn but the model predicted they did.
+- The customer didn't churn and the model predicted that.
+
+---
+
+I get the actual responses from the `has_churned` column of the dataset and assign them `actual_response`.
+
+I get the "most likely" predicted responses from the model and assign to `predicted_response`
+
+I create a table of counts from the actual and predicted response vectors and assign to outcomes.
+
+
+```{r}
+# Get the actual responses from the dataset
+actual_response = churn$has_churned
+
+# Get the "most likely" responses from the model
+predicted_response = round(fitted(mdl_churn_vs_relationship))
+
+# Create a table of counts
+outcomes = table(predicted_response, actual_response)
+outcomes
+```
+
+---
+
+The `yardstick` package lets you plot the confusion matrix, and calculate performance metrics. 
+
+I convert `outcomes` to a yardstick confusion matrix object and plot the confusion matrix.
+
+```{r}
+confusion = conf_mat(outcomes)
+
+autoplot(confusion)
+```
+
+---
+
+Calling `summary` on the confusion matrix returns lots of model performance metrics. 
+
+Since I used 0 and 1 for the response values, the second column contains the positive responses, so I set `event_level` to "second". 
+
+```{r}
+summary(confusion, event_level = "second")
+```
+
+
+---
+
+The first metric is "accuracy".  This is the proportion of correct predictions. This is represented by the number of correct predictions divided by the total number of observations
+
+This can be represented by the following equation: (112 + 124) / (112 + 124 + 88 + 76) = 0.59
+
+```{r}
+summary(confusion) %>%
+  slice(1)
+```
+
+
+---
+
+The third metric is "sensitivity".  This is the proportion of observations where the actual response was true, where the model also predicted that they were true. 
+
+This can be represented by the following equation: 124 / (124 + 76) = .62
+
+```{r}
+summary(confusion, event_level = "second") %>%
+  slice(3)
+```
+
+---
+
+The fourth metric is "specificity".  This is the proportion of observations where the actual response was false, where the model also predicted that they were false.
+
+This can be represented by the following equation: 112 / (112 + 88) = .56
+
+```{r}
+summary(confusion, event_level = "second") %>%
+  slice(4)
+```
+
+
