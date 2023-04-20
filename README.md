@@ -13,4 +13,4 @@ The **churn** data set which contains information from a financial services comp
 All data sets can be found in the repository. 
 
 
-[Click here to see the full project](https://isaac110820.github.io/Simple-Linear-Regression-and-Simple-Logistic-Regression/RMarkdown.html)
+[Click here to see the full project](https://isaac110820.github.io/Simple-Linear-Regression-and-Simple-Logistic-Regression/Markdown.html)
