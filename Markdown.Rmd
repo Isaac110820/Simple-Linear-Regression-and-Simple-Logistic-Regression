@@ -29,7 +29,7 @@ The **churn** data set which contains information from a financial services comp
 1. [Simple Linear Regression](#one)
 2. [Predictions and model objects](#two)
 3. [Assessing model fit](#three)
-3. [Simple logistic regression](#four)
+4. [Simple logistic regression](#four)
 
 
 ---
